@@ -61,7 +61,7 @@ class Handler(SocketServer.StreamRequestHandler):
         # translate the local path to remote
         remote_root = os.path.join(remote['remote_root'], os.path.relpath(local_path, project.root))
 
-        cmdline = "cd %s && %s" % (remote_root, command)
+        cmdline = "cd %s && %s | sed -u 's#%s#%s#'" % (remote_root, command, remote['remote_root'], project.root)
         self.wfile.write('=== remoter: running command [%s] on host [%s]\n' % (cmdline, remote['remote_name']))
 
         try:
