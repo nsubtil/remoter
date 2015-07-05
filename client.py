@@ -5,7 +5,9 @@ import socket
 import argparse
 import json
 import sys
-import struct
+import time
+
+start_time = time.time()
 
 default_socket_address = os.path.expanduser('~') + "/.remoter-socket"
 
@@ -35,6 +37,11 @@ while data != '':
         l = f.readline()
         js = json.loads(l)
         if js[0] == 'returncode':
+            elapsed_time = time.time() - start_time
+
+            if elapsed_time >= 10.0:
+                os.system("/usr/local/bin/terminal-notifier -message '{} on {} finished' -title 'Remoter' -subtitle 'Build finished'".format(working_directory, args.target[0]))
+
             sys.exit(js[1])
         else:
             print "=== remoter client: invalid json received [%s]" % js
