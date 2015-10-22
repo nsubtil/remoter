@@ -61,15 +61,28 @@ class Handler(SocketServer.StreamRequestHandler):
         # translate the local path to remote
         remote_root = os.path.join(remote['remote_root'], os.path.relpath(local_path, project.root))
 
-        cmdline = "cd %s && %s 2>&1 | sed -u 's#%s#%s#'" % (remote_root, command, remote['remote_root'], project.root)
-        self.wfile.write('=== remoter: running command [%s] on host [%s]\n' % (cmdline, remote['remote_name']))
+        # set ^D to send an interrupt signal
+        stty_setup = "stty isig intr ^D -echoctl"
+        # trap SIGINT
+        trap_setup = "trap '/bin/true' SIGINT"
+
+        # reset tty settings
+        stty_teardown = "stty sane"
+        # reset shell traps
+        trap_teardown = "trap - SIGINT"
+
+        cmd_setup = "%s ; %s" % (stty_setup, trap_setup)
+        cmd_teardown = "RET=$? ; %s ; %s ; exit $RET" % (trap_teardown, stty_teardown)
+
+        cmdline = "%s ; cd %s && %s 2>&1 | sed -u 's#%s#%s#' ; %s" % (cmd_setup, remote_root, command, remote['remote_root'], project.root, cmd_teardown)
+        self.wfile.write('=== remoter: running command [%s] on root [%s] host [%s]\n' % (command, remote_root, remote['remote_name']))
 
         try:
             ssh.run(cmdline, stdout=self.wfile)
-            ssh.wait()
+            ssh.wait(self.rfile, self.wfile)
             self.__send_end_marker(ssh.pipe.returncode)
         except Exception as e:
-            pass
+            ssh.stop()
 
     def handle(self):
         main = self.server.getmain()

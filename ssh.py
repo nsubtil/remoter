@@ -1,6 +1,8 @@
 import subprocess
 import config
 import shlex
+import signal
+import select
 
 _default_ssh_bin_path = "/usr/local/bin/ssh"
 _default_ssh_options = {
@@ -10,6 +12,7 @@ _default_ssh_options = {
     'ControlPersist': '3600',
     'ForwardX11': 'no',
     'NumberOfPasswordPrompts': '0',
+    'LogLevel': 'QUIET',
     #'RequestTTY' : 'force',
 }
 
@@ -46,6 +49,7 @@ class SSHConnection:
 
     def ssh_build_cmdline(self, remote_command=None, bare=False):
         cmdline = self.__ssh_bin_path
+        cmdline += " -tt"
 
         # add all our default ssh options
         for key in self.__ssh_options:
@@ -86,10 +90,34 @@ class SSHConnection:
         print "launching [%s]" % cmdline
 
         args = shlex.split(cmdline)
-        self.pipe = subprocess.Popen(args, bufsize=0, stdout=stdout, stderr=stdout)
+        self.pipe = subprocess.Popen(args, bufsize=0, stdout=subprocess.PIPE, stderr=stdout)
 
     def poll(self):
         return self.pipe.poll()
 
-    def wait(self):
-        return self.pipe.communicate()
+    def wait(self, incoming_pipe, outgoing_pipe):
+        read_set = [self.pipe.stdout, incoming_pipe]
+
+        while True:
+            try:
+                rlist, _, _ = select.select(read_set, [], [])
+            except select.error, e:
+                if e.args[0] == errno.EINTR:
+                    print "eintr!"
+                    #self.stop()
+                    return
+                raise
+
+            if self.pipe.stdout in rlist:
+                data = self.pipe.stdout.read(1)
+                if not data:
+                    return
+
+                outgoing_pipe.write(data)
+
+            if incoming_pipe in rlist:
+                self.stop()
+                return
+
+    def stop(self):
+        self.pipe.send_signal(signal.SIGHUP)
