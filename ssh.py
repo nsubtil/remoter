@@ -49,7 +49,8 @@ class SSHConnection:
 
     def ssh_build_cmdline(self, remote_command=None, bare=False):
         cmdline = self.__ssh_bin_path
-        cmdline += " -tt"
+        if not bare:
+            cmdline += " -tt"
 
         # add all our default ssh options
         for key in self.__ssh_options:
